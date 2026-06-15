@@ -913,7 +913,7 @@ function renderBlockKey(block: AssistantRenderBlock, index: number): string {
 .u-meta {
   align-self: flex-end;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
   max-width: 84%;
