@@ -124,7 +124,7 @@ describe('multi-segment thinking', () => {
     });
   });
 
-  it('keeps live bash progress on the running tool call', () => {
+  it('keeps live bash progress on the running tool call without auto-expanding it', () => {
     const state = play([
       ['turn.started', { turnId: 1 }],
       ['turn.step.started', { turnId: 1 }],
@@ -141,9 +141,10 @@ describe('multi-segment thinking', () => {
         name: 'bash',
         status: 'running',
         output: ['running tests\n'],
-        defaultExpanded: true,
       },
     });
+    if (block?.kind !== 'tool') throw new Error('expected a tool block');
+    expect(block.tool.defaultExpanded).toBeUndefined();
   });
 });
 
