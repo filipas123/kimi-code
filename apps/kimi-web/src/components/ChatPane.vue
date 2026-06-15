@@ -941,6 +941,11 @@ function renderBlockKey(block: AssistantRenderBlock, index: number): string {
   color: var(--blue);
   background: var(--hover);
 }
+.u-meta .u-edit,
+.u-meta .u-time {
+  min-height: 22px;
+  box-sizing: border-box;
+}
 .u-meta .u-edit-text {
   max-width: 0;
   overflow: hidden;
