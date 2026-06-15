@@ -6,6 +6,7 @@ export default {
   emptyWorkspaceHint: '在 {name} 中发送',
   switchWorkspace: '切换工作区',
   addWorkspace: '添加工作区',
+  moreWorkspaces: '更多工作区 ({count})',
   compacting: '正在压缩上下文…',
   compactedPlain: '上下文已压缩',
   compactedAuto: '已自动压缩上下文',

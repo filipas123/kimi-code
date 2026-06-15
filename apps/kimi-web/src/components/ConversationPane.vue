@@ -26,6 +26,7 @@ import SwarmCard from './SwarmCard.vue';
 import GoalStrip from './GoalStrip.vue';
 import ViewGroup from './ViewGroup.vue';
 import SplitLayout from './SplitLayout.vue';
+import { getVisibleWorkspaces } from '../lib/workspacePicker';
 
 const props = defineProps<{
   turns: ChatTurn[];
@@ -156,9 +157,25 @@ const emit = defineEmits<{
 
 // Empty-composer workspace picker.
 const wsPickOpen = ref(false);
+const wsPickExpanded = ref(false);
+
 const activeWorkspaceLabel = computed(() => {
   const w = props.workspaces?.find((ws) => ws.id === props.activeWorkspaceId);
   return w?.name ?? props.workspaceName ?? '';
+});
+
+const visibleWorkspaces = computed(() =>
+  getVisibleWorkspaces(props.workspaces ?? [], props.activeWorkspaceId, wsPickExpanded.value),
+);
+
+const hiddenWorkspaceCount = computed(
+  () => (props.workspaces?.length ?? 0) - visibleWorkspaces.value.length,
+);
+
+// Collapse the expanded list when the dropdown closes so it doesn't stay open
+// the next time the user opens the menu.
+watch(wsPickOpen, (open) => {
+  if (!open) wsPickExpanded.value = false;
 });
 
 /** Swarm cards are live progress indicators: keep the bottom stack only while
@@ -1193,7 +1210,7 @@ onUnmounted(() => {
               <div v-if="wsPickOpen" class="ws-pick-backdrop" @click="wsPickOpen = false" />
               <div v-if="wsPickOpen" class="ws-pick-menu">
                 <button
-                  v-for="w in workspaces"
+                  v-for="w in visibleWorkspaces"
                   :key="w.id"
                   type="button"
                   class="ws-pick-item"
@@ -1202,6 +1219,14 @@ onUnmounted(() => {
                 >
                   <span class="ws-pick-item-name">{{ w.name }}</span>
                   <span class="ws-pick-item-path">{{ w.shortPath }}</span>
+                </button>
+                <button
+                  v-if="hiddenWorkspaceCount > 0"
+                  type="button"
+                  class="ws-pick-item ws-pick-more"
+                  @click.stop="wsPickExpanded = !wsPickExpanded"
+                >
+                  <span>{{ t('conversation.moreWorkspaces', { count: hiddenWorkspaceCount }) }}</span>
                 </button>
                 <div class="ws-pick-divider" />
                 <button
@@ -1891,6 +1916,12 @@ onUnmounted(() => {
 .ws-pick-item-name { font-size: var(--ui-font-size-sm); color: var(--ink); }
 .ws-pick-item.on .ws-pick-item-name { color: var(--blue2); font-weight: 600; }
 .ws-pick-item-path { font-size: calc(var(--ui-font-size) - 3px); color: var(--muted); }
+.ws-pick-item.ws-pick-more {
+  flex-direction: row;
+  justify-content: center;
+  color: var(--dim);
+}
+.ws-pick-item.ws-pick-more:hover { color: var(--ink); }
 .ws-pick-divider {
   height: 1px;
   margin: 4px 6px;
