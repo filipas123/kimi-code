@@ -112,17 +112,28 @@ watch(searchQuery, () => {
   activeMatch.value = 0;
 });
 
-function scrollToLine(line: number | undefined): void {
+function scrollToLine(line: number | undefined, reset = false): void {
   if (!line) return;
   void nextTick(() => {
-    const el = rootRef.value?.querySelector<HTMLElement>(`[data-line="${line}"]`);
-    el?.scrollIntoView({ block: 'center' });
+    const bodyEl = rootRef.value?.querySelector<HTMLElement>('.fp-body');
+    const el = bodyEl?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+    if (!bodyEl || !el) return;
+    // When a new file (or line) is requested, start from the top so the target
+    // line is positioned predictably. Without this, switching files while the
+    // previous file was scrolled mid-content can make the scroller appear to
+    // "jump up" as scrollIntoView tries to center the new target against the
+    // stale scroll position.
+    if (reset) bodyEl.scrollTop = 0;
+    const bodyRect = bodyEl.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const relativeTop = elRect.top - bodyRect.top + bodyEl.scrollTop;
+    bodyEl.scrollTop = relativeTop - bodyEl.clientHeight / 2 + elRect.height / 2;
   });
 }
 
 watch(
   () => [props.file?.path, props.line] as const,
-  () => scrollToLine(props.line),
+  () => scrollToLine(props.line, true),
   { immediate: true },
 );
 
