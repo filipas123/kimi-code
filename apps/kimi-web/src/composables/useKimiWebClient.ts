@@ -1031,6 +1031,23 @@ function pushOperationFailure(
   pushWarning(operationFailureNotice(operation, err, opts));
 }
 
+// Goal-specific protocol error codes (40913–40918). The daemon now returns
+// these instead of a bare 500, so map them to a friendly explanation rather
+// than dumping the raw envelope message on the user.
+const GOAL_ERROR_KEYS: Record<number, string> = {
+  40913: 'warnings.goal.alreadyExists',
+  40914: 'warnings.goal.notFound',
+  40915: 'warnings.goal.statusInvalid',
+  40916: 'warnings.goal.notResumable',
+  40918: 'warnings.goal.objectiveTooLong',
+};
+
+function goalErrorMessage(err: unknown): string | undefined {
+  if (!isDaemonApiError(err)) return undefined;
+  const key = GOAL_ERROR_KEYS[err.code];
+  return key ? i18n.global.t(key) : undefined;
+}
+
 async function handleSessionNotFound(sessionId: string): Promise<void> {
   rawState.sessions = rawState.sessions.filter((s) => s.id !== sessionId);
   delete rawState.messagesBySession[sessionId];
@@ -3083,7 +3100,7 @@ async function createGoal(objective: string): Promise<void> {
   try {
     await getKimiWebApi().updateSession(sid, { goalObjective: trimmed });
   } catch (err) {
-    pushOperationFailure('createGoal', err, { sessionId: sid });
+    pushOperationFailure('createGoal', err, { sessionId: sid, message: goalErrorMessage(err) });
     return;
   }
   await sendPrompt(trimmed);
@@ -3095,7 +3112,7 @@ function controlGoal(action: 'pause' | 'resume' | 'cancel'): void {
   if (!sid) return;
   void Promise.resolve(getKimiWebApi().updateSession(sid, { goalControl: action }))
     .catch((err) => {
-      pushOperationFailure('controlGoal', err, { sessionId: sid });
+      pushOperationFailure('controlGoal', err, { sessionId: sid, message: goalErrorMessage(err) });
     });
 }
 
