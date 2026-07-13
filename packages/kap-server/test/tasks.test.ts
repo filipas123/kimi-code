@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  IEventBus,
   IAgentLifecycleService,
   IAgentProfileService,
   IAgentTaskService,
@@ -10,6 +11,7 @@ import {
   ISessionSwarmService,
   IModelResolver,
   type AgentTask,
+  type DomainEvent,
 } from '@moonshot-ai/agent-core-v2';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -357,7 +359,7 @@ describe('server-v2 /api/v1/sessions/{sid}/tasks', () => {
     });
   });
 
-  it('cancels through REST when a non-main agent owns the swarm member', async () => {
+  it('publishes one cancellation when REST stops a non-main swarm during its start hook', async () => {
     const id = await createSession();
     const swarm = await sessionSwarm(id);
     const session = server!.core.accessor.get(ISessionLifecycleService).get(id);
@@ -369,6 +371,29 @@ describe('server-v2 /api/v1/sessions/{sid}/tasks', () => {
       agentId: 'agent-owned-child',
       labels: { parentAgentId: caller.id },
     });
+
+    let enterHook: () => void = () => {};
+    const hookEntered = new Promise<void>((resolve) => {
+      enterHook = resolve;
+    });
+    let releaseHook: () => void = () => {};
+    const hookReleased = new Promise<void>((resolve) => {
+      releaseHook = resolve;
+    });
+    const hookRegistration = lifecycle.hooks.onWillStartAgentTask.register(
+      'tasks-test-deferred-start',
+      async (_context, next) => {
+        enterHook();
+        await hookReleased;
+        await next();
+      },
+    );
+    const failures: Array<DomainEvent<'subagent.failed'>> = [];
+    const eventRegistration = caller.accessor
+      .get(IEventBus)
+      .subscribe('subagent.failed', (event) => {
+        if (event.subagentId === 'agent-owned-child') failures.push(event);
+      });
 
     let rejectCompletion: (reason?: unknown) => void = () => {};
     const completion = new Promise<{ summary: string }>((_resolve, reject) => {
@@ -407,13 +432,22 @@ describe('server-v2 /api/v1/sessions/{sid}/tasks', () => {
     await vi.waitFor(() => {
       expect(runAgent).toHaveBeenCalledOnce();
     });
+    await hookEntered;
 
     const cancelled = await cancelTask(id, 'agent-owned-child');
 
     expect(cancelled.body).toMatchObject({ code: 0, data: { cancelled: true } });
     expect(runSignal?.aborted).toBe(true);
+    expect(failures).toEqual([]);
+    releaseHook();
     await expect(running).resolves.toMatchObject([
       { agentId: 'agent-owned-child', status: 'aborted' },
+    ]);
+    expect(failures).toEqual([
+      expect.objectContaining({
+        subagentId: 'agent-owned-child',
+        cancelled: true,
+      }),
     ]);
     const repeated = await cancelTask(id, 'agent-owned-child');
     expect(repeated.body).toMatchObject({
@@ -421,6 +455,9 @@ describe('server-v2 /api/v1/sessions/{sid}/tasks', () => {
       data: { cancelled: false },
       details: { current_status: 'cancelled' },
     });
+    expect(failures).toHaveLength(1);
+    eventRegistration.dispose();
+    hookRegistration.dispose();
   });
 
   it('keeps resumed swarm cancellation authoritative over terminal task history', async () => {

@@ -287,6 +287,41 @@ function createAgentLifecycleStub(options: AgentLifecycleStubOptions = {}): Agen
   return lifecycle;
 }
 
+function createMirrorRequester(lifecycle: IAgentLifecycleService): {
+  readonly requester: IAgentScopeHandle;
+  readonly events: DomainEvent[];
+} {
+  const events: DomainEvent[] = [];
+  const eventBus = {
+    _serviceBrand: undefined,
+    publish: vi.fn((event: DomainEvent) => {
+      events.push(event);
+    }),
+    subscribe: vi.fn(() => noopDisposable()),
+  } as IEventBus;
+  return {
+    events,
+    requester: {
+      id: 'main',
+      kind: LifecycleScope.Agent,
+      accessor: {
+        get: ((serviceId: unknown) => {
+          if (serviceId === IEventBus) return eventBus;
+          if (serviceId === IAgentLifecycleService) return lifecycle;
+          return undefined;
+        }) as IAgentScopeHandle['accessor']['get'],
+      },
+      dispose: () => {},
+    },
+  };
+}
+
+function cancelledFailures(events: readonly DomainEvent[]): DomainEvent[] {
+  return events.filter(
+    (event) => event.type === 'subagent.failed' && event.cancelled === true,
+  );
+}
+
 function agentTool(ctx: TestAgentContext): ExecutableTool<AgentToolInput> {
   const tool = ctx.get(IAgentToolRegistryService).resolve('Agent');
   expect(tool).toBeDefined();
@@ -652,24 +687,7 @@ describe('Agent tool execution contract', () => {
 
   it('mirrors explicit user cancellation as a cancelled subagent failure', async () => {
     const lifecycle = createAgentLifecycleStub();
-    const events: DomainEvent[] = [];
-    const eventBus = {
-      _serviceBrand: undefined,
-      publish: vi.fn((event: DomainEvent) => events.push(event)),
-      subscribe: vi.fn(() => noopDisposable()),
-    } as IEventBus;
-    const requester = {
-      id: 'main',
-      kind: LifecycleScope.Agent,
-      accessor: {
-        get: ((serviceId: unknown) => {
-          if (serviceId === IEventBus) return eventBus;
-          if (serviceId === IAgentLifecycleService) return lifecycle;
-          return undefined;
-        }) as IAgentScopeHandle['accessor']['get'],
-      },
-      dispose: () => {},
-    } satisfies IAgentScopeHandle;
+    const { requester, events } = createMirrorRequester(lifecycle);
     const controller = new AbortController();
     const reason = userCancellationReason();
     controller.abort(reason);
@@ -692,6 +710,74 @@ describe('Agent tool execution contract', () => {
       subagentId: 'agent-child',
       cancelled: true,
     });
+  });
+
+  it('publishes one cancelled failure when the signal is aborted before the start hook', async () => {
+    const lifecycle = createAgentLifecycleStub();
+    const { requester, events } = createMirrorRequester(lifecycle);
+    const controller = new AbortController();
+    const reason = userCancellationReason();
+    const completion = deferred<{ summary: string }>();
+    const cancel = vi.fn((cancelReason?: unknown) => {
+      completion.reject(cancelReason);
+    });
+    controller.abort(reason);
+
+    const mirrored = mirrorAgentRun(
+      requester,
+      {
+        agentId: 'agent-child',
+        turn: {} as AgentRunHandle['turn'],
+        completion: completion.promise,
+      },
+      {
+        profileName: 'explore',
+        prompt: 'Investigate',
+        signal: controller.signal,
+        cancel,
+      },
+    );
+
+    await expect(mirrored).rejects.toBe(reason);
+    expect(lifecycle.hooks.onWillStartAgentTask.run).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledWith(reason);
+    expect(cancelledFailures(events)).toEqual([
+      expect.objectContaining({ subagentId: 'agent-child', cancelled: true }),
+    ]);
+  });
+
+  it('publishes one cancelled failure when the signal is aborted after the start hook', async () => {
+    const lifecycle = createAgentLifecycleStub();
+    const { requester, events } = createMirrorRequester(lifecycle);
+    const hookFinished = deferred<void>();
+    vi.mocked(lifecycle.hooks.onWillStartAgentTask.run).mockImplementation(async () => {
+      hookFinished.resolve(undefined);
+    });
+    const controller = new AbortController();
+    const completion = deferred<{ summary: string }>();
+    const mirrored = mirrorAgentRun(
+      requester,
+      {
+        agentId: 'agent-child',
+        turn: {} as AgentRunHandle['turn'],
+        completion: completion.promise,
+      },
+      {
+        profileName: 'explore',
+        prompt: 'Investigate',
+        signal: controller.signal,
+      },
+    );
+    await hookFinished.promise;
+    await Promise.resolve();
+    const reason = userCancellationReason();
+    controller.abort(reason);
+    completion.reject(reason);
+
+    await expect(mirrored).rejects.toBe(reason);
+    expect(cancelledFailures(events)).toEqual([
+      expect.objectContaining({ subagentId: 'agent-child', cancelled: true }),
+    ]);
   });
 
   it('inherits parent user tools when spawning a subagent', async () => {

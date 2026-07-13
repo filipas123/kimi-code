@@ -27,6 +27,7 @@ import type { IAgentScopeHandle } from '#/_base/di/scope';
 import {
   isAbortError,
   isUserCancellation,
+  type UserCancellationError,
   userCancellationReason,
 } from '#/_base/utils/abort';
 import { IAgentContextSizeService } from '#/agent/contextSize/contextSize';
@@ -118,11 +119,30 @@ export async function mirrorAgentRun(
 ): Promise<{ summary: string; usage?: TokenUsage }> {
   const eventBus = requester.accessor.get(IEventBus);
   const agentLifecycle = requester.accessor.get(IAgentLifecycleService);
+  let cancellationPublished = false;
+  const resolveCancellation = (reason: unknown): UserCancellationError | undefined =>
+    isUserCancellation(reason)
+      ? reason
+      : isUserCancellation(options.signal.reason)
+        ? options.signal.reason
+        : undefined;
+  const publishCancellation = (reason: UserCancellationError): void => {
+    if (cancellationPublished) return;
+    cancellationPublished = true;
+    eventBus?.publish({
+      type: 'subagent.failed',
+      subagentId: run.agentId,
+      error: errorMessage(reason),
+      cancelled: true,
+    });
+  };
+  void run.completion.catch(() => {});
   eventBus?.publish({ type: 'subagent.started', subagentId: run.agentId });
   if (options.prompt !== undefined) {
     const cancelAndRethrow = (reason: unknown): never => {
+      const cancellationReason = resolveCancellation(reason);
+      if (cancellationReason !== undefined) publishCancellation(cancellationReason);
       options.cancel?.(reason);
-      void run.completion.catch(() => {});
       throw reason;
     };
     try {
@@ -154,18 +174,9 @@ export async function mirrorAgentRun(
     });
     return result;
   } catch (error) {
-    const cancellationReason = isUserCancellation(error)
-      ? error
-      : isUserCancellation(options.signal.reason)
-        ? options.signal.reason
-        : undefined;
+    const cancellationReason = resolveCancellation(error);
     if (cancellationReason !== undefined) {
-      eventBus?.publish({
-        type: 'subagent.failed',
-        subagentId: run.agentId,
-        error: errorMessage(cancellationReason),
-        cancelled: true,
-      });
+      publishCancellation(cancellationReason);
     } else if (!isAbortError(error) && !shouldSuppressFailure(options, error)) {
       eventBus?.publish({
         type: 'subagent.failed',
