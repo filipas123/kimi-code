@@ -293,6 +293,46 @@ describe('SessionEventBroadcaster', () => {
     expect(snap.inFlightTurn).toMatchObject({ turn_id: 1, assistant_text: 'Hello' });
   });
 
+  it('getSnapshotState exposes the live subagent roster until turn.ended', async () => {
+    const lc = new FakeLifecycle();
+    const main = lc.addAgent('main');
+    sessions.set('s1', lc);
+    await bc.subscribe('s1', collectingTarget().target);
+
+    main.bus.emit(
+      agentEvent('subagent.spawned', {
+        subagentId: 'agent_1',
+        subagentName: 'explore',
+        parentToolCallId: 'call_1',
+        description: 'explore the auth flow',
+        swarmIndex: 0,
+        runInBackground: false,
+      }),
+    );
+    main.bus.emit(agentEvent('subagent.started', { subagentId: 'agent_1' }));
+    const mid = await bc.getSnapshotState('s1');
+    expect(mid.subagents).toMatchObject([
+      {
+        id: 'agent_1',
+        session_id: 's1',
+        kind: 'subagent',
+        description: 'explore the auth flow',
+        status: 'running',
+        subagent_phase: 'working',
+        subagent_type: 'explore',
+        parent_tool_call_id: 'call_1',
+        swarm_index: 0,
+        run_in_background: false,
+      },
+    ]);
+
+    main.bus.emit(agentEvent('subagent.completed', { subagentId: 'agent_1', resultSummary: 'done' }));
+    main.bus.emit(agentEvent('turn.started', { turnId: 1 }));
+    main.bus.emit(agentEvent('turn.ended', { turnId: 1 }));
+    const after = await bc.getSnapshotState('s1');
+    expect(after.subagents).toEqual([]);
+  });
+
   it('fans core model-catalog changes out to every session subscriber', async () => {
     const lc = new FakeLifecycle();
     lc.addAgent('main');
