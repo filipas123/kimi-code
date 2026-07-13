@@ -9,13 +9,14 @@
  * dispatch queue — same pattern as `InFlightTurnTracker`, keeping the roster,
  * the journal watermark, and fan-out order mutually consistent.
  *
- * Lifetime: the roster is dropped on `turn.ended`. After turn end the swarm's
- * `<agent_swarm_result>` tool output is in the wire transcript and becomes the
- * restore source; this also bounds the roster's lifetime (background
- * subagents that outlive a turn are a known, pre-existing bound — same
- * trade-off as `InFlightTurnTracker`).
+ * Lifetime: the roster is dropped on the main agent's `turn.ended`. After the
+ * main turn ends, the swarm's `<agent_swarm_result>` tool output is in the wire
+ * transcript and becomes the restore source; this also bounds the roster's
+ * lifetime (background subagents that outlive a turn are a known, pre-existing
+ * bound — same trade-off as `InFlightTurnTracker`).
  */
 
+import { MAIN_AGENT_ID } from '@moonshot-ai/agent-core-v2';
 import type { Event, SnapshotSubagent } from '@moonshot-ai/protocol';
 
 export class SubagentRosterTracker {
@@ -36,11 +37,9 @@ export class SubagentRosterTracker {
           description: event.description ?? event.subagentName ?? 'Sub Agent',
           status: 'running',
           subagent_phase: 'queued',
-          ...(event.subagentName !== undefined ? { subagent_type: event.subagentName } : {}),
-          ...(event.parentToolCallId !== undefined
-            ? { parent_tool_call_id: event.parentToolCallId }
-            : {}),
-          ...(event.swarmIndex !== undefined ? { swarm_index: event.swarmIndex } : {}),
+          subagent_type: event.subagentName,
+          parent_tool_call_id: event.parentToolCallId,
+          swarm_index: event.swarmIndex,
           run_in_background: event.runInBackground,
           created_at: new Date().toISOString(),
         });
@@ -82,6 +81,7 @@ export class SubagentRosterTracker {
         return;
       }
       case 'turn.ended': {
+        if (event.agentId !== MAIN_AGENT_ID) return;
         // After turn end the swarm's `<agent_swarm_result>` tool output is in
         // the wire transcript and becomes the restore source; dropping the
         // roster here also bounds its lifetime.

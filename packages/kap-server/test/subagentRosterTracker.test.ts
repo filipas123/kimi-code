@@ -98,10 +98,21 @@ describe('SubagentRosterTracker', () => {
     });
   });
 
-  it('drops the roster on turn.ended', () => {
+  it('keeps the roster when a child agent turn ends', () => {
     const t = new SubagentRosterTracker();
     t.apply(SID, spawned());
-    t.apply(SID, ev({ type: 'turn.ended', turnId: 1 }));
+    t.apply(SID, spawned({ subagentId: 'agent_2', swarmIndex: 1 }));
+    t.apply(
+      SID,
+      ev({ type: 'turn.ended', agentId: 'agent_1', turnId: 1, reason: 'completed' }),
+    );
+    expect(t.get(SID).map((entry) => entry.id)).toEqual(['agent_1', 'agent_2']);
+  });
+
+  it('drops the roster when the main agent turn ends', () => {
+    const t = new SubagentRosterTracker();
+    t.apply(SID, spawned());
+    t.apply(SID, ev({ type: 'turn.ended', turnId: 1, reason: 'completed' }));
     expect(t.get(SID)).toEqual([]);
   });
 
