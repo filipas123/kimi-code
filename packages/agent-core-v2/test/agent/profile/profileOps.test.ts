@@ -324,7 +324,32 @@ describe('AgentProfileService (wire-backed config.update)', () => {
     ]);
   });
 
-  it('forces configured Kimi thinking effort outside declared support_efforts', () => {
+  it('uses the resolved Kimi effort instead of the configured default', () => {
+    const generationKwargs: GenerationKwargs[] = [];
+    const thinkingEfforts: ThinkingEffort[] = [];
+    modelResolver = {
+      _serviceBrand: undefined,
+      resolve: () => createRecordingModel(generationKwargs, thinkingEfforts),
+      findByName: () => [],
+    };
+    const host = buildHost('profile-thinking-effort-resolved');
+    host.svc.configure({ emitStatusUpdated: () => undefined });
+    configValues['thinking'] = { effort: ' max ' };
+
+    host.svc.update({ modelAlias: 'kimi-code', thinkingLevel: 'high' });
+    const model = host.svc.resolveModel();
+
+    expect(model?.thinkingEffort).toBe('high');
+    expect(thinkingEfforts).toEqual(['high']);
+    expect(generationKwargs).toEqual([
+      {
+        prompt_cache_key: 'session-test',
+        extra_body: { thinking: { keep: 'all' } },
+      },
+    ]);
+  });
+
+  it('forces the environment Kimi effort instead of the resolved effort', () => {
     const generationKwargs: GenerationKwargs[] = [];
     const thinkingEfforts: ThinkingEffort[] = [];
     modelResolver = {
@@ -334,9 +359,9 @@ describe('AgentProfileService (wire-backed config.update)', () => {
     };
     const host = buildHost('profile-thinking-effort-force');
     host.svc.configure({ emitStatusUpdated: () => undefined });
-    configValues['thinking'] = { effort: ' max ' };
+    configValues['thinking'] = { effort: 'low', forcedEffort: ' max ' };
 
-    host.svc.update({ modelAlias: 'kimi-code', thinkingLevel: 'on' });
+    host.svc.update({ modelAlias: 'kimi-code', thinkingLevel: 'high' });
     const model = host.svc.resolveModel();
 
     expect(model?.thinkingEffort).toBe('max');

@@ -303,7 +303,7 @@ export class AgentProfileService implements IAgentProfileService {
     const thinkingConfig = this.config.get<ThinkingConfig>(THINKING_SECTION);
     const forcedKimiThinkingEffort =
       model.protocol === 'kimi' && thinkingLevel !== 'off'
-        ? normalizeKimiThinkingEffort(thinkingConfig?.effort)
+        ? normalizeKimiThinkingEffort(thinkingConfig?.forcedEffort)
         : undefined;
     const kwargs: GenerationKwargs = {};
     if (model.protocol === 'kimi') {
