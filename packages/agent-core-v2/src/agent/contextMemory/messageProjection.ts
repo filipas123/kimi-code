@@ -49,7 +49,12 @@ function mapContentPart(part: ContextMessage['content'][number]): MessageContent
 
 /**
  * Build the protocol-shaped `Message.content[]` for one history entry:
- *   1. `tool` role → a single `tool_result` part.
+ *   1. `tool` role → a single `tool_result` part. Plain-text results keep the
+ *      historical flattened-text output; a result that carries media parts
+ *      (image/video/audio — e.g. ReadMediaFile) passes the raw kosong
+ *      content-part array through instead, the same shape the live
+ *      `tool.result` event stream carries, so REST consumers can still render
+ *      the media after reload/resume.
  *   2. other roles → each mapped content part, then one `tool_use` part per
  *      `ToolCall` (assistant only).
  */
@@ -58,21 +63,24 @@ function buildProtocolContent(msg: ContextMessage): MessageContent[] {
     if (msg.toolCallId === undefined) {
       return msg.content.map((p) => mapContentPart(p));
     }
-    const flattenedOutput = msg.content
-      .map((p) => (p.type === 'text' ? p.text : ''))
-      .join('');
+    const hasMediaPart = msg.content.some(
+      (p) => p.type === 'image_url' || p.type === 'video_url' || p.type === 'audio_url',
+    );
+    const output: unknown = hasMediaPart
+      ? msg.content
+      : msg.content.map((p) => (p.type === 'text' ? p.text : '')).join('');
     const part: MessageContent =
       msg.isError === true
         ? {
             type: 'tool_result',
             tool_call_id: msg.toolCallId,
-            output: flattenedOutput,
+            output,
             is_error: true,
           }
         : {
             type: 'tool_result',
             tool_call_id: msg.toolCallId,
-            output: flattenedOutput,
+            output,
           };
     return [part];
   }
