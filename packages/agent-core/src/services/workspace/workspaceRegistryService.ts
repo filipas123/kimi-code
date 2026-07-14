@@ -265,14 +265,30 @@ export class WorkspaceRegistryService extends Disposable implements IWorkspaceRe
                 encodeWorkDirKey(normalizeWorkDir(candidate.root)) === workspaceId,
             )
           : undefined;
-      const existing =
+      let existing =
         exact === undefined
           ? fallback === undefined
             ? undefined
             : { id: fallback[0], entry: fallback[1] }
           : { id: workspaceId, entry: exact };
       if (existing === undefined) {
-        throw new WorkspaceNotFoundError(workspaceId);
+        const derived = await this.findDerivedWorkspace(workspaceId);
+        if (
+          derived === undefined ||
+          normalizedDeletedRoots(file).has(normalizeWorkDir(derived.root))
+        ) {
+          throw new WorkspaceNotFoundError(workspaceId);
+        }
+        const representativeId = representativeIndexedWorkspaceId(derived, workspaceId);
+        existing = {
+          id: representativeId,
+          entry: {
+            root: derived.root,
+            name: posixBasename(derived.root),
+            created_at: new Date(derived.createdAt).toISOString(),
+            last_opened_at: new Date(derived.lastOpenedAt).toISOString(),
+          },
+        };
       }
       const root = normalizeWorkDir(existing.entry.root);
       const canonicalId = encodeWorkDirKey(root);

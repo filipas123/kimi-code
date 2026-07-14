@@ -169,7 +169,12 @@ export class WorkspaceRegistryService implements IWorkspaceRegistry {
       const next = cloneCatalog(catalog);
       let existing = findRepresentativeWorkspace([...next.workspaces.values()], id);
       if (existing === undefined) {
-        const recovered = (await this.rebuildFromSessionIndex()).workspaces.get(id);
+        const rebuilt = await this.rebuildFromSessionIndex();
+        const recovered =
+          rebuilt.workspaces.get(id) ??
+          [...rebuilt.workspaces.values()].find(
+            (workspace) => encodeWorkDirKey(normalizeWorkDir(workspace.root)) === id,
+          );
         if (recovered !== undefined) {
           next.workspaces.set(recovered.id, recovered);
           existing = recovered;
