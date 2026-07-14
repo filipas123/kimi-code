@@ -118,7 +118,7 @@ export class WorkspaceRegistryService implements IWorkspaceRegistry {
       const workspace: Workspace = {
         id: representativeId,
         root: normalizedRoot,
-        name: name ?? existing?.name ?? basename(normalizedRoot),
+        name: existing?.name ?? name ?? basename(normalizedRoot),
         createdAt: existing?.createdAt ?? now,
         lastOpenedAt: now,
       };

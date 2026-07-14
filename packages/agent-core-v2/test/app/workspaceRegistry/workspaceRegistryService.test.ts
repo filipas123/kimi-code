@@ -280,7 +280,11 @@ describe('WorkspaceRegistryService (file-backed)', () => {
       expect.objectContaining({ id: alias, root }),
     ]);
     await expect(registry.get(canonicalId)).resolves.toMatchObject({ id: alias, root });
-    await expect(registry.createOrTouch(root)).resolves.toMatchObject({ id: alias, root });
+    await expect(registry.createOrTouch(root, 'new-name')).resolves.toMatchObject({
+      id: alias,
+      root,
+      name: 'alias-only',
+    });
     await expect(registry.update(alias, { name: 'renamed' })).resolves.toMatchObject({
       id: alias,
       name: 'renamed',
