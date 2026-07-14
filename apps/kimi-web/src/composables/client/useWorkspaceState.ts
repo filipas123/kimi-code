@@ -2143,12 +2143,12 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     }
   }
 
-  /** Export the session selected when the action starts. A synchronous lock
-   * prevents duplicate ZIP generation and a later session switch cannot
-   * redirect the in-flight request. */
-  async function exportSession(): Promise<void> {
+  /** Export the given session (default: the active one). The id is captured
+   * synchronously so a later session switch cannot redirect the in-flight
+   * request, and a lock prevents duplicate ZIP generation. */
+  async function exportSession(targetSessionId?: string): Promise<void> {
     if (exportInFlight) return;
-    const sessionId = rawState.activeSessionId;
+    const sessionId = targetSessionId ?? rawState.activeSessionId;
     if (!sessionId) {
       const message = t('commands.export.noSession');
       traceKeyEvent('export:failed', { status: 'no-session' });
