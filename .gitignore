@@ -1,6 +1,8 @@
 node_modules/
 dist/
-dist-web/
+# dist-web/ is intentionally NOT ignored: the web bundle is built in the
+# code-app repo and synced here (`pnpm sync:web`) as a committed artifact,
+# while apps/kimi-web sources are being split out of this repo.
 dist-single/
 dist-native/
 .tmp-api-extractor/
