@@ -938,6 +938,118 @@ describe('Agent turn flow', () => {
     await ctx.expectResumeMatches();
   });
 
+  it('keeps cancel pending while the aborted provider request is still settling', async () => {
+    const providerStarted = createControlledPromise<void>();
+    const abortObserved = createControlledPromise<void>();
+    const finishCancellation = createControlledPromise<void>();
+    const generate: GenerateFn = async (
+      _chat,
+      _systemPrompt,
+      _tools,
+      _history,
+      _callbacks,
+      options,
+    ) => {
+      providerStarted.resolve();
+      options?.signal?.addEventListener(
+        'abort',
+        () => {
+          abortObserved.resolve();
+        },
+        { once: true },
+      );
+      await abortObserved;
+      await finishCancellation;
+      throw abortError();
+    };
+    const ctx = testAgent({ generate });
+    ctx.configure();
+
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Wait for cancellation.' }] });
+    await providerStarted;
+    const cancel = ctx.rpc.cancel({ turnId: 0 });
+    await abortObserved;
+
+    expect(
+      await Promise.race([
+        cancel.then(() => 'resolved' as const),
+        Promise.resolve('pending' as const),
+      ]),
+    ).toBe('pending');
+
+    finishCancellation.resolve();
+    await cancel;
+  });
+
+  it('places the cancellation reminder before a follow-up submitted after cancel resolves', async () => {
+    const histories: Message[][] = [];
+    const firstRequestStarted = createControlledPromise<void>();
+    let calls = 0;
+    const generate: GenerateFn = async (
+      _chat,
+      _systemPrompt,
+      _tools,
+      history,
+      _callbacks,
+      options,
+    ) => {
+      histories.push(structuredClone(history));
+      calls += 1;
+      if (calls === 1) {
+        firstRequestStarted.resolve();
+        await new Promise<void>((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            'abort',
+            () => {
+              reject(options.signal?.reason ?? abortError());
+            },
+            { once: true },
+          );
+        });
+      }
+      return textResult('Continued.');
+    };
+    const ctx = testAgent({ generate });
+    ctx.configure();
+
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Start work, then wait.' }] });
+    await firstRequestStarted;
+    await ctx.rpc.cancel({});
+    await ctx.untilTurnEnd();
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Continue.' }] });
+    await ctx.untilTurnEnd();
+
+    expect(histories[1]).toEqual([
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Start work, then wait.' }],
+        toolCalls: [],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: [
+              '<system-reminder>',
+              'The user interrupted the previous turn before it finished.',
+              '',
+              'Some operations may already have taken effect. Treat the next user message as a follow-up, and check existing state before repeating operations.',
+              '</system-reminder>',
+            ].join('\n'),
+          },
+        ],
+        toolCalls: [],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Continue.' }],
+        toolCalls: [],
+      },
+    ]);
+    await ctx.expectResumeMatches();
+  });
+
   it('still ends a cancelled turn when its diagnostic cannot be rendered', async () => {
     const ctx = testAgent({ generate: abortableGenerate });
     ctx.configure();
