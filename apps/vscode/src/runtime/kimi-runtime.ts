@@ -12,6 +12,7 @@ import {
   legacyApprovalMetadata,
   readLegacyApprovalFlags,
   readMigratedLegacyApprovalFlags,
+  withGlobalYoloMode,
   type LegacyApprovalFlags,
 } from "./legacy-approval";
 import { SessionRuntime } from "./session-runtime";
@@ -109,9 +110,10 @@ export class KimiRuntime {
       try {
         assertSessionWorkDir(session, options.workDir);
         const storedApproval = readLegacyApprovalFlags(session.summary?.metadata);
-        const approval =
+        const restoredApproval =
           storedApproval ?? (await this.readMigratedLegacyApproval(session)) ?? defaultApproval;
-        if (storedApproval === undefined) {
+        const approval = withGlobalYoloMode(restoredApproval, options.yoloMode);
+        if (storedApproval === undefined || flagsDiffer(storedApproval, approval)) {
           await session.updateMetadata(legacyApprovalMetadata(approval));
         }
         await applySessionSettings(session, options, approval);
@@ -145,11 +147,12 @@ export class KimiRuntime {
     if (runtime === undefined) {
       try {
         const storedApproval = readLegacyApprovalFlags(session.summary?.metadata);
-        const approval =
+        const restoredApproval =
           storedApproval ??
           (await this.readMigratedLegacyApproval(session)) ??
           { yolo: defaultYoloMode, afk: false };
-        if (storedApproval === undefined) {
+        const approval = withGlobalYoloMode(restoredApproval, defaultYoloMode);
+        if (storedApproval === undefined || flagsDiffer(storedApproval, approval)) {
           await session.updateMetadata(legacyApprovalMetadata(approval));
         }
         const status = await session.getStatus();
@@ -264,6 +267,10 @@ async function applySessionSettings(
 
 function normalizeEffort(effort: string): ThinkingEffort {
   return (effort.trim() || "off") as ThinkingEffort;
+}
+
+function flagsDiffer(a: LegacyApprovalFlags, b: LegacyApprovalFlags): boolean {
+  return a.yolo !== b.yolo || a.afk !== b.afk;
 }
 
 function assertSessionWorkDir(session: Pick<Session, "workDir">, expectedWorkDir: string): void {

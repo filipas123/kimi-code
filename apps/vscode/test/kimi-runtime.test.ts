@@ -246,7 +246,7 @@ describe("Kimi runtime (owns shared SDK sessions for Webviews)", () => {
         workDir: "/workspace",
         model: "kimi-k2",
         thinking: "high",
-        permission: "manual",
+        permission: "yolo",
         metadata: { vscode_legacy_approval: { yolo: true, afk: false } },
       },
     ]);
@@ -358,6 +358,57 @@ describe("Kimi runtime (owns shared SDK sessions for Webviews)", () => {
     expect(session.metadataUpdates).toEqual([
       { vscode_legacy_approval: { yolo: true, afk: false } },
     ]);
+  });
+
+  it("lets the global yolo setting override a persisted off flag on resume", async () => {
+    const { runtime, sdk } = createRuntime();
+    const session = sdk.addSession(
+      "saved-1",
+      "/workspace",
+      { permission: "manual" },
+      { vscode_legacy_approval: { yolo: false, afk: false } },
+    );
+
+    const opened = await runtime.openSession(openOptions({ sessionId: "saved-1", yoloMode: true }));
+
+    expect(session.setPermissions).toEqual(["yolo"]);
+    expect(session.metadataUpdates).toEqual([
+      { vscode_legacy_approval: { yolo: true, afk: false } },
+    ]);
+    expect(opened.legacyApprovalFlags).toEqual({ yolo: true, afk: false });
+  });
+
+  it("lets the global yolo setting disable a persisted session yolo flag on resume", async () => {
+    const { runtime, sdk } = createRuntime();
+    const session = sdk.addSession(
+      "saved-1",
+      "/workspace",
+      { permission: "yolo" },
+      { vscode_legacy_approval: { yolo: true, afk: false } },
+    );
+
+    const opened = await runtime.openSession(openOptions({ sessionId: "saved-1", yoloMode: false }));
+
+    expect(session.setPermissions).toEqual(["manual"]);
+    expect(session.metadataUpdates).toEqual([
+      { vscode_legacy_approval: { yolo: false, afk: false } },
+    ]);
+    expect(opened.legacyApprovalFlags).toEqual({ yolo: false, afk: false });
+  });
+
+  it("keeps the persisted afk flag while applying the global yolo setting on resume", async () => {
+    const { runtime, sdk } = createRuntime();
+    const session = sdk.addSession(
+      "saved-1",
+      "/workspace",
+      { permission: "manual" },
+      { vscode_legacy_approval: { yolo: false, afk: true } },
+    );
+
+    const opened = await runtime.openSession(openOptions({ sessionId: "saved-1", yoloMode: true }));
+
+    expect(session.setPermissions).toEqual(["auto"]);
+    expect(opened.legacyApprovalFlags).toEqual({ yolo: true, afk: true });
   });
 
   it("restores persisted afk with core auto permission", async () => {

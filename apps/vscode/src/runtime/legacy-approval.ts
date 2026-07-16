@@ -54,5 +54,18 @@ export function legacyApprovalMetadata(flags: LegacyApprovalFlags): JsonObject {
 }
 
 export function corePermissionForLegacyApproval(flags: LegacyApprovalFlags): PermissionMode {
-  return flags.afk ? "auto" : "manual";
+  if (flags.afk) return "auto";
+  return flags.yolo ? "yolo" : "manual";
+}
+
+/**
+ * The global `kimi.yoloMode` setting is authoritative whenever a session
+ * attaches to the runtime; afk stays per-session because it has no global
+ * setting counterpart.
+ */
+export function withGlobalYoloMode(
+  flags: LegacyApprovalFlags,
+  yoloMode: boolean,
+): LegacyApprovalFlags {
+  return flags.yolo === yoloMode ? flags : { yolo: yoloMode, afk: flags.afk };
 }

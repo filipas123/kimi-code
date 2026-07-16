@@ -257,14 +257,14 @@ function completionChunk(
   };
 }
 
-async function openRuntimeSession(rig: RuntimeRig, sessionId?: string) {
+async function openRuntimeSession(rig: RuntimeRig, sessionId?: string, yoloMode = false) {
   return rig.runtime.openSession({
     webviewId: "view-1",
     workDir: rig.workDir,
     sessionId,
     model: MODEL_ALIAS,
     effort: "off",
-    yoloMode: false,
+    yoloMode,
   });
 }
 
@@ -1106,7 +1106,7 @@ describe("VS Code Kimi harness integration (shares one in-process SDK home)", ()
 
     await runSlash(runtime, "/yolo");
     expect(runtime.legacyApprovalFlags).toEqual({ yolo: true, afk: false });
-    await expect(runtime.session.getStatus()).resolves.toMatchObject({ permission: "manual" });
+    await expect(runtime.session.getStatus()).resolves.toMatchObject({ permission: "yolo" });
 
     await runSlash(runtime, "/afk");
     expect(runtime.legacyApprovalFlags).toEqual({ yolo: true, afk: true });
@@ -1114,19 +1114,23 @@ describe("VS Code Kimi harness integration (shares one in-process SDK home)", ()
 
     await runSlash(runtime, "/afk");
     expect(runtime.legacyApprovalFlags).toEqual({ yolo: true, afk: false });
-    await expect(runtime.session.getStatus()).resolves.toMatchObject({ permission: "manual" });
+    await expect(runtime.session.getStatus()).resolves.toMatchObject({ permission: "yolo" });
   });
 
-  it("restores slash permission flags after the VS Code session closes", async () => {
+  it("applies the global yolo setting when a closed VS Code session reopens", async () => {
     const rig = await createRuntimeRig();
     const first = await openRuntimeSession(rig);
     await runSlash(first, "/yolo");
     await rig.runtime.detachView("view-1");
 
-    const resumed = await openRuntimeSession(rig, first.id);
+    const reopened = await openRuntimeSession(rig, first.id);
+    expect(reopened.legacyApprovalFlags).toEqual({ yolo: false, afk: false });
+    await expect(reopened.session.getStatus()).resolves.toMatchObject({ permission: "manual" });
+    await rig.runtime.detachView("view-1");
 
-    expect(resumed.legacyApprovalFlags).toEqual({ yolo: true, afk: false });
-    await expect(resumed.session.getStatus()).resolves.toMatchObject({ permission: "manual" });
+    const yoloReopened = await openRuntimeSession(rig, first.id, true);
+    expect(yoloReopened.legacyApprovalFlags).toEqual({ yolo: true, afk: false });
+    await expect(yoloReopened.session.getStatus()).resolves.toMatchObject({ permission: "yolo" });
   });
 
   it("exports current context as Markdown under the workspace", async () => {
