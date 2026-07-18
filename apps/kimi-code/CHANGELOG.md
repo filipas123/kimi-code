@@ -1,5 +1,23 @@
 # @moonshot-ai/kimi-code
 
+## 0.28.0
+
+### Minor Changes
+
+- [#1853](https://github.com/MoonshotAI/kimi-code/pull/1853) [`4f3c724`](https://github.com/MoonshotAI/kimi-code/commit/4f3c7240c4adc7c748e536bf578e468c1b5bcd7b) Thanks [@wbxl2000](https://github.com/wbxl2000)! - **Breaking**: `kimi web` and the TUI `/web` command now run the server in the foreground by default instead of backgrounding a daemon — the command stays attached to the terminal until Ctrl+C instead of returning immediately. Pass `--background` in scripts or launchers to keep the previous background behavior; `kimi server run` is unchanged. An already-running server is reused as-is across upgrades (a version mismatch is pointed out in the output); run `kimi server kill` once after upgrading to restart on the new version.
+
+### Patch Changes
+
+- [#1867](https://github.com/MoonshotAI/kimi-code/pull/1867) [`3086e47`](https://github.com/MoonshotAI/kimi-code/commit/3086e4703992fbbe7a41379405ee243713ad9ced) Thanks [@RealKai42](https://github.com/RealKai42)! - Rename the stale "afk" reference to "auto" in the built-in MCP config skill guidance.
+
+- [#1867](https://github.com/MoonshotAI/kimi-code/pull/1867) [`3086e47`](https://github.com/MoonshotAI/kimi-code/commit/3086e4703992fbbe7a41379405ee243713ad9ced) Thanks [@RealKai42](https://github.com/RealKai42)! - Correct the YOLO and Auto permission mode descriptions in CLI --help output and in the ACP session mode selector shown by IDE clients.
+
+- [#1867](https://github.com/MoonshotAI/kimi-code/pull/1867) [`3086e47`](https://github.com/MoonshotAI/kimi-code/commit/3086e4703992fbbe7a41379405ee243713ad9ced) Thanks [@RealKai42](https://github.com/RealKai42)! - web: Correct the YOLO and Auto permission mode descriptions in the slash command list and the mobile permission sheet.
+
+- [#1867](https://github.com/MoonshotAI/kimi-code/pull/1867) [`3086e47`](https://github.com/MoonshotAI/kimi-code/commit/3086e4703992fbbe7a41379405ee243713ad9ced) Thanks [@RealKai42](https://github.com/RealKai42)! - Fix the YOLO and Auto permission mode descriptions to match their actual behavior: YOLO auto-approves tool actions but the agent may still ask questions, while Auto is fully autonomous and never asks.
+
+- [#1867](https://github.com/MoonshotAI/kimi-code/pull/1867) [`3086e47`](https://github.com/MoonshotAI/kimi-code/commit/3086e4703992fbbe7a41379405ee243713ad9ced) Thanks [@RealKai42](https://github.com/RealKai42)! - Correct the YOLO mode notice shown when replaying a session: tool actions are auto-approved, but the agent may still ask questions.
+
 ## 0.27.0
 
 ### Minor Changes
